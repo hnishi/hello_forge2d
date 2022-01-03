@@ -53,7 +53,10 @@ class Player extends PositionBodyComponent {
   }
 
   void move(Vector2 delta) {
-    position.add(delta);
+    body.position.add(delta);
+    //body.position.setValues(60, -41);
+    //print('body.pos: ${body.position}');
+    //print('pos: ${position}');
   }
 }
 
@@ -97,7 +100,7 @@ class BlobPart extends BodyComponent {
 class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
   SpaceShooterGame() : super(gravity: Vector2(0, -10.0));
 
-  static const int speed = 200;
+  static const int speed = 20;
   final Vector2 velocity = Vector2(0, 0);
 
   late Player player;
@@ -147,11 +150,10 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
     } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
       velocity.x = isKeyDown ? 1 : 0;
     } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
-      velocity.y = isKeyDown ? -1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.keyS) {
       velocity.y = isKeyDown ? 1 : 0;
+    } else if (event.logicalKey == LogicalKeyboardKey.keyS) {
+      velocity.y = isKeyDown ? -1 : 0;
     }
-
     return super.onKeyEvent(event, keysPressed);
   }
 }
