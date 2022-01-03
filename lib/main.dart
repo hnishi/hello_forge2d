@@ -6,23 +6,50 @@ import 'package:flame/components.dart';
 import 'package:flame/input.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flame_forge2d/position_body_component.dart';
 import 'package:flame_forge2d/body_component.dart';
 import 'package:flame_forge2d/forge2d_game.dart';
 import 'package:forge2d/forge2d.dart';
 
 import 'boundaries.dart';
 
-class Player extends SpriteComponent with HasGameRef<SpaceShooterGame> {
+class Player extends PositionBodyComponent {
+  final Vector2 position;
+
+  Player(
+    this.position, {
+    Vector2? size,
+  }) : super(size: size ?? Vector2(2, 3));
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    final sprite = await gameRef.loadSprite('player-sprite.png');
+    positionComponent = SpriteComponent(sprite: sprite, size: size);
+  }
 
-    sprite = await gameRef.loadSprite('player-sprite.png');
+  @override
+  Body createBody() {
+    final shape = PolygonShape();
 
-    position = gameRef.size / 2;
-    width = 100;
-    height = 150;
-    anchor = Anchor.center;
+    final vertices = [
+      Vector2(-size.x / 2, -size.y / 2),
+      Vector2(size.x / 2, -size.y / 2),
+      Vector2(0, size.y / 2),
+    ];
+    shape.set(vertices);
+
+    final fixtureDef = FixtureDef(shape)
+      ..userData = this // To be able to determine object in collision
+      ..restitution = 0.4
+      ..density = 1.0
+      ..friction = 0.5;
+
+    final bodyDef = BodyDef()
+      ..position = position
+      ..angle = (position.x + position.y) / 2 * math.pi
+      ..type = BodyType.dynamic;
+    return world.createBody(bodyDef)..createFixture(fixtureDef);
   }
 
   void move(Vector2 delta) {
@@ -79,11 +106,12 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
   Future<void> onLoad() async {
     await super.onLoad();
 
-    player = Player();
-    add(player);
-
     final worldCenter = screenToWorld(size * camera.zoom / 2);
     addAll(createBoundaries(this));
+
+    final position = worldCenter;
+    player = Player(position);
+    add(player);
 
     final blobCenter = worldCenter + Vector2(0, 30);
     final blobRadius = Vector2.all(6.0);
