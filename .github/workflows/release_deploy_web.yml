@@ -8,6 +8,9 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-18.04
     steps:
+    - name: Check out repository code
+      uses: actions/checkout@v2
+
     # Set up Flutter.
     - name: Clone Flutter repository with master channel
       uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8
