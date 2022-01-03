@@ -10,6 +10,8 @@ import 'package:flame_forge2d/body_component.dart';
 import 'package:flame_forge2d/forge2d_game.dart';
 import 'package:forge2d/forge2d.dart';
 
+import 'boundaries.dart';
+
 class Player extends SpriteComponent with HasGameRef<SpaceShooterGame> {
   @override
   Future<void> onLoad() async {
@@ -81,6 +83,8 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
     add(player);
 
     final worldCenter = screenToWorld(size * camera.zoom / 2);
+    addAll(createBoundaries(this));
+
     final blobCenter = worldCenter + Vector2(0, 30);
     final blobRadius = Vector2.all(6.0);
     final jointDef = ConstantVolumeJointDef()
