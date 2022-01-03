@@ -1,0 +1,26 @@
+name: Deploy to web (github pages)
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-18.04
+    steps:
+    # Set up Flutter.
+    - name: Clone Flutter repository with master channel
+      uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8
+      with:
+        channel: master
+    - run: flutter doctor -v
+
+    # Build and deploy (by default, to staging).
+    - run: flutter pub get
+    - run: flutter build -v web --release --web-renderer canvaskit
+
+    - name: Deploy
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./build/web
