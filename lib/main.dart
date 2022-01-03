@@ -53,10 +53,7 @@ class Player extends PositionBodyComponent {
   }
 
   void move(Vector2 delta) {
-    body.position.add(delta);
-    //body.position.setValues(60, -41);
-    //print('body.pos: ${body.position}');
-    //print('pos: ${position}');
+    body.applyLinearImpulse(delta * 100);
   }
 }
 
