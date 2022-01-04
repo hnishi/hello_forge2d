@@ -22,7 +22,7 @@ jobs:
 
     # Build and deploy.
     - name: Build
-    - run: flutter build -v web --release --web-renderer canvaskit --base-href "/$(basename $GITHUB_REPOSITORY)/"
+      run: flutter build -v web --release --web-renderer canvaskit --base-href "/$(basename $GITHUB_REPOSITORY)/"
       shell: bash
       env:
         GITHUB_CONTEXT: ${{ github.repository }}
