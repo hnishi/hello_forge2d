@@ -29,3 +29,9 @@ jobs:
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./build/web
+
+    - name: Dump github context
+      run:   echo "$GITHUB_CONTEXT"
+      shell: bash
+      env:
+       GITHUB_CONTEXT: ${{ toJson(github) }}
