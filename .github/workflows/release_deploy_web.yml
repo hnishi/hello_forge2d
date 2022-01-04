@@ -21,17 +21,14 @@ jobs:
     - run: flutter pub get
 
     # Build and deploy.
-    - run: flutter pub get
-    - run: flutter build -v web --release --web-renderer canvaskit
+    - name: Build
+    - run: flutter build -v web --release --web-renderer canvaskit --base-href "/$(basename $GITHUB_REPOSITORY)/"
+      shell: bash
+      env:
+        GITHUB_CONTEXT: ${{ github.repository }}
 
     - name: Deploy
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./build/web
-
-    - name: Dump github context
-      run:   echo "$GITHUB_CONTEXT"
-      shell: bash
-      env:
-       GITHUB_CONTEXT: ${{ toJson(github) }}
