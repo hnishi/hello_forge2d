@@ -27,3 +27,9 @@ jobs:
       run: flutter format --set-exit-if-changed --dry-run .
     # - name: Run Flutter unit tests
     #   run: flutter test
+
+    - name: Dump github context
+      run:   echo "$(basename $GITHUB_REPOSITORY)"
+      shell: bash
+      env:
+       GITHUB_CONTEXT: ${{ github.repository }}
