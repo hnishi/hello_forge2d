@@ -5,7 +5,6 @@ import 'package:flame/game.dart';
 import 'package:flame/components.dart';
 import 'package:flame/input.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flame_forge2d/position_body_component.dart';
 import 'package:flame_forge2d/body_component.dart';
 import 'package:flame_forge2d/forge2d_game.dart';
@@ -100,11 +99,24 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
   static const int speed = 20;
   final Vector2 velocity = Vector2(0, 0);
 
+  static final TextPaint textRenderer = TextPaint(
+    style: const TextStyle(color: Colors.white70, fontSize: 6),
+  );
+  late final TextComponent positionText;
+
   late Player player;
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+
+    positionText = TextComponent(
+      text: 'use W, A, S, D keys\nto move spacecraft',
+      textRenderer: textRenderer,
+      position: Vector2(1, 1),
+      anchor: Anchor.topLeft,
+    );
+    add(positionText);
 
     final worldCenter = screenToWorld(size * camera.zoom / 2);
     addAll(createBoundaries(this));
@@ -149,6 +161,14 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
     } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
       velocity.y = isKeyDown ? 1 : 0;
     } else if (event.logicalKey == LogicalKeyboardKey.keyS) {
+      velocity.y = isKeyDown ? -1 : 0;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      velocity.x = isKeyDown ? -1 : 0;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      velocity.x = isKeyDown ? 1 : 0;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      velocity.y = isKeyDown ? 1 : 0;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       velocity.y = isKeyDown ? -1 : 0;
     }
     return super.onKeyEvent(event, keysPressed);
