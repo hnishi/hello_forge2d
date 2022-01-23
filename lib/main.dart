@@ -100,7 +100,7 @@ class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
   final Vector2 velocity = Vector2(0, 0);
 
   static final TextPaint textRenderer = TextPaint(
-    style: const TextStyle(color: Colors.white70, fontSize: 6),
+    style: const TextStyle(color: Colors.white30, fontSize: 6),
   );
   late final TextComponent positionText;
 
