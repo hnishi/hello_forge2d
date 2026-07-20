@@ -28,12 +28,20 @@ void main() {
       for (var i = 0; i < 5; i++) {
         session.registerReturn();
       }
-      expect(session.ballSpeed, 17.5);
+      expect(session.ballSpeed, 40);
 
       for (var i = 0; i < 100; i++) {
         session.registerReturn();
       }
       expect(session.ballSpeed, RallySession.maximumBallSpeed);
+    });
+
+    test('a smash adds a fifty point bonus', () {
+      final session = RallySession()..serve();
+
+      expect(session.registerReturn(smash: true), 60);
+      expect(session.score, 60);
+      expect(session.smashes, 1);
     });
 
     test('a miss resets rally but preserves the best', () {

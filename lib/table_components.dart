@@ -11,7 +11,9 @@ class TableSurface extends PositionComponent {
         priority: -10,
       );
 
-  final Paint _surfacePaint = Paint()..color = const Color(0xFF126E62);
+  final Paint _surfacePaint = Paint()..color = const Color(0xFF164D5A);
+  final Paint _upperAirPaint = Paint()..color = const Color(0xFF103745);
+  final Paint _lowerAirPaint = Paint()..color = const Color(0x2217D7FF);
   final Paint _innerPaint = Paint()
     ..color = const Color(0xFF0B4F47)
     ..style = PaintingStyle.stroke
@@ -19,7 +21,7 @@ class TableSurface extends PositionComponent {
   final Paint _linePaint = Paint()
     ..color = const Color(0x99FFFFFF)
     ..strokeWidth = 0.12;
-  final Paint _goalPaint = Paint()..color = const Color(0x2217D7FF);
+  final Paint _goalPaint = Paint()..color = const Color(0x33FF5A5F);
 
   @override
   void render(Canvas canvas) {
@@ -27,6 +29,11 @@ class TableSurface extends PositionComponent {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(0.7)),
       _surfacePaint,
+    );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.x, size.y / 2), _upperAirPaint);
+    canvas.drawRect(
+      Rect.fromLTWH(0, size.y / 2, size.x, size.y / 2),
+      _lowerAirPaint,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect.deflate(0.5), const Radius.circular(0.4)),
@@ -42,6 +49,16 @@ class TableSurface extends PositionComponent {
       Offset(size.x - 0.5, size.y / 2),
       _linePaint,
     );
+    for (var i = 1; i < 4; i++) {
+      final y = size.y * i / 4;
+      canvas.drawLine(
+        Offset(0.5, y),
+        Offset(size.x - 0.5, y),
+        Paint()
+          ..color = const Color(0x33FFFFFF)
+          ..strokeWidth = 0.08,
+      );
+    }
     canvas.drawRect(
       Rect.fromLTWH(0.5, size.y - 5, size.x - 1, 4.5),
       _goalPaint,

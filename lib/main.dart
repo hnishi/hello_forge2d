@@ -11,6 +11,8 @@ import 'package:flutter/services.dart';
 import 'rally_session.dart';
 import 'table_components.dart';
 
+enum PaddleSwingPhase { idle, windup, drive, recover }
+
 class Paddle extends BodyComponent {
   Paddle({
     required this.initialPosition,
@@ -28,6 +30,15 @@ class Paddle extends BodyComponent {
   final Paint _shadowPaint = Paint()..color = const Color(0x44000000);
   final Paint _paddlePaint = Paint()..color = const Color(0xFFFF5A5F);
   final Paint _highlightPaint = Paint()..color = const Color(0xFFFFB3B5);
+  PaddleSwingPhase swingPhase = PaddleSwingPhase.idle;
+
+  bool get isSwinging => swingPhase != PaddleSwingPhase.idle;
+  double get hitPower => switch (swingPhase) {
+    PaddleSwingPhase.drive => 1,
+    PaddleSwingPhase.windup => 0.25,
+    PaddleSwingPhase.recover => 0.45,
+    PaddleSwingPhase.idle => 0,
+  };
 
   @override
   Body createBody() {
@@ -39,7 +50,7 @@ class Paddle extends BodyComponent {
     final bodyDef = BodyDef(
       userData: this,
       position: initialPosition,
-      fixedRotation: true,
+      allowSleep: false,
       type: BodyType.kinematic,
     );
     return world.createBody(bodyDef)..createFixture(fixtureDef);
@@ -62,7 +73,39 @@ class Paddle extends BodyComponent {
   void keepInsideTable() {
     final clampedX = body.position.x.clamp(minimumX, maximumX);
     if (clampedX != body.position.x) {
-      body.setTransform(Vector2(clampedX, body.position.y), 0);
+      body.setTransform(Vector2(clampedX, body.position.y), body.angle);
+    }
+  }
+
+  void swing() {
+    if (isSwinging) {
+      return;
+    }
+    swingPhase = PaddleSwingPhase.windup;
+    body.setAwake(true);
+  }
+
+  void updateSwing() {
+    switch (swingPhase) {
+      case PaddleSwingPhase.idle:
+        body.angularVelocity = 0;
+      case PaddleSwingPhase.windup:
+        body.angularVelocity = -6;
+        if (body.angle <= -0.28) {
+          swingPhase = PaddleSwingPhase.drive;
+        }
+      case PaddleSwingPhase.drive:
+        body.angularVelocity = 12;
+        if (body.angle >= 0.5) {
+          swingPhase = PaddleSwingPhase.recover;
+        }
+      case PaddleSwingPhase.recover:
+        body.angularVelocity = -5;
+        if (body.angle <= 0) {
+          body.setTransform(body.position, 0);
+          body.angularVelocity = 0;
+          swingPhase = PaddleSwingPhase.idle;
+        }
     }
   }
 
@@ -117,6 +160,7 @@ class RallyBall extends BodyComponent<WallRallyGame> with ContactCallbacks {
       type: BodyType.dynamic,
       bullet: true,
       fixedRotation: true,
+      gravityScale: Vector2.zero(),
     );
     return world.createBody(bodyDef)..createFixture(fixtureDef);
   }
@@ -134,10 +178,12 @@ class RallyBall extends BodyComponent<WallRallyGame> with ContactCallbacks {
     body.setTransform(position, 0);
     body.linearVelocity.setZero();
     body.angularVelocity = 0;
+    body.gravityScale = Vector2.zero();
   }
 
   void launch(Vector2 velocity) {
     // Assign through the setter so a ball sleeping on the paddle wakes up.
+    body.gravityScale = Vector2.all(1);
     body.linearVelocity = velocity;
   }
 
@@ -159,7 +205,7 @@ class RallyBall extends BodyComponent<WallRallyGame> with ContactCallbacks {
 
 class WallRallyGame extends Forge2DGame
     with KeyboardEvents, TapCallbacks, DragCallbacks, PointerMoveCallbacks {
-  WallRallyGame() : super(gravity: Vector2.zero(), zoom: 10);
+  WallRallyGame() : super(gravity: Vector2(0, 10), zoom: 10);
 
   static final TextPaint hudRenderer = TextPaint(
     style: const TextStyle(
@@ -192,6 +238,8 @@ class WallRallyGame extends Forge2DGame
   double? _pointerTargetX;
   bool _paddleReturnQueued = false;
   bool _missQueued = false;
+  double _queuedHitPower = 0;
+  double _queuedAngularVelocity = 0;
 
   @override
   Color backgroundColor() => const Color(0xFF071A24);
@@ -267,6 +315,7 @@ class WallRallyGame extends Forge2DGame
   @override
   void update(double dt) {
     paddle.move(direction: _horizontalInput, targetX: _pointerTargetX);
+    paddle.updateSwing();
 
     if (session.isReady || session.isGameOver) {
       ball.holdAt(paddle.body.position + Vector2(0, -2));
@@ -289,6 +338,8 @@ class WallRallyGame extends Forge2DGame
   void queuePaddleReturn() {
     if (session.isPlaying) {
       _paddleReturnQueued = true;
+      _queuedHitPower = math.max(_queuedHitPower, paddle.hitPower);
+      _queuedAngularVelocity = paddle.body.angularVelocity;
     }
   }
 
@@ -299,7 +350,8 @@ class WallRallyGame extends Forge2DGame
   }
 
   void _returnBall() {
-    session.registerReturn();
+    final isSmash = _queuedHitPower >= 0.8;
+    session.registerReturn(smash: isSmash);
     final hitOffset =
         ((ball.body.position.x - paddle.body.position.x) / (Paddle.width / 2))
             .clamp(-0.9, 0.9);
@@ -307,8 +359,14 @@ class WallRallyGame extends Forge2DGame
       -0.35,
       0.35,
     );
-    final direction = Vector2(hitOffset + paddleInfluence, -1).normalized();
-    ball.launch(direction * session.ballSpeed);
+    final swingInfluence = (_queuedAngularVelocity / 18).clamp(-0.55, 0.55);
+    final direction = Vector2(
+      hitOffset + paddleInfluence + swingInfluence,
+      -1,
+    ).normalized();
+    ball.launch(direction * (session.ballSpeed + _queuedHitPower * 3.5));
+    _queuedHitPower = 0;
+    _queuedAngularVelocity = 0;
   }
 
   void _handleMiss() {
@@ -331,23 +389,26 @@ class WallRallyGame extends Forge2DGame
     session.restart();
     _paddleReturnQueued = false;
     _missQueued = false;
+    _queuedHitPower = 0;
+    _queuedAngularVelocity = 0;
     ball.holdAt(paddle.body.position + Vector2(0, -2));
   }
 
   void _refreshHud() {
     hudText.text =
         'SCORE ${session.score}   RALLY ${session.rally}   '
-        'BEST ${session.bestRally}   LIFE ${session.lives}';
+        'BEST ${session.bestRally}   SMASH ${session.smashes}   '
+        'LIFE ${session.lives}   GRAVITY ON';
 
     if (session.isGameOver) {
       messageText.text = 'GAME OVER\nTAP OR R TO RETRY';
       helpText.text = '';
     } else if (session.isReady) {
-      messageText.text = 'WALL RALLY\nTAP OR SPACE TO SERVE';
-      helpText.text = 'MOVE: A / D · ARROWS · MOUSE · DRAG';
+      messageText.text = 'WALL RALLY\nTAP OR ENTER TO SERVE';
+      helpText.text = 'MOVE: A / D · ARROWS · MOUSE · DRAG   SWING: SPACE';
     } else {
       messageText.text = '';
-      helpText.text = 'Keep the rally alive!';
+      helpText.text = 'SPACE: SWING   Read the free-fall arc!';
     }
   }
 
@@ -375,6 +436,8 @@ class WallRallyGame extends Forge2DGame
 
     if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.space) {
+        paddle.swing();
+      } else if (event.logicalKey == LogicalKeyboardKey.enter) {
         _serve();
       } else if (event.logicalKey == LogicalKeyboardKey.keyR &&
           session.isGameOver) {
