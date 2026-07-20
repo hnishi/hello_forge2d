@@ -1,11 +1,11 @@
 {
-    "name": "Core Rush",
-    "short_name": "Core Rush",
+    "name": "Wall Rally",
+    "short_name": "Wall Rally",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#101629",
     "theme_color": "#101629",
-    "description": "A physics-based arcade game.",
+    "description": "Single-player 2D table tennis wall rally.",
     "orientation": "landscape-primary",
     "prefer_related_applications": false,
     "icons": [
