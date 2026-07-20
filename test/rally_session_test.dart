@@ -44,6 +44,22 @@ void main() {
       expect(session.smashes, 1);
     });
 
+    test('targets award escalating chain bonuses', () {
+      final session = RallySession()..serve();
+
+      expect(session.registerTarget(chain: 1), 100);
+      expect(session.registerTarget(chain: 3), 300);
+      expect(session.targetsDestroyed, 2);
+      expect(session.score, 400);
+    });
+
+    test('bumpers award twenty-five points', () {
+      final session = RallySession()..serve();
+
+      expect(session.registerBumperHit(), 25);
+      expect(session.score, 25);
+    });
+
     test('a miss resets rally but preserves the best', () {
       final session = RallySession()..serve();
       session.registerReturn();

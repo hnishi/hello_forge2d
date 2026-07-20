@@ -12,6 +12,7 @@ class RallySession {
   int rally = 0;
   int bestRally = 0;
   int smashes = 0;
+  int targetsDestroyed = 0;
   int lives = startingLives;
 
   bool get isReady => phase == RallyPhase.ready;
@@ -42,6 +43,24 @@ class RallySession {
     return points;
   }
 
+  int registerTarget({required int chain}) {
+    if (!isPlaying) {
+      return 0;
+    }
+    targetsDestroyed++;
+    final points = 100 * chain;
+    score += points;
+    return points;
+  }
+
+  int registerBumperHit() {
+    if (!isPlaying) {
+      return 0;
+    }
+    score += 25;
+    return 25;
+  }
+
   void miss() {
     if (!isPlaying) {
       return;
@@ -57,6 +76,7 @@ class RallySession {
     score = 0;
     rally = 0;
     smashes = 0;
+    targetsDestroyed = 0;
     lives = startingLives;
   }
 }

@@ -8,6 +8,7 @@ import 'package:flame_forge2d/flame_forge2d.dart';
 import 'package:flutter/material.dart' hide PointerMoveEvent;
 import 'package:flutter/services.dart';
 
+import 'arena_objects.dart';
 import 'rally_session.dart';
 import 'table_components.dart';
 
@@ -171,6 +172,10 @@ class RallyBall extends BodyComponent<WallRallyGame> with ContactCallbacks {
       game.queuePaddleReturn();
     } else if (other is MissZone) {
       game.queueMiss();
+    } else if (other is ExplosiveTarget) {
+      game.queueExplosion(other);
+    } else if (other is ArenaBumper) {
+      game.queueBumperHit();
     }
   }
 
@@ -233,6 +238,8 @@ class WallRallyGame extends Forge2DGame
   late final TextComponent messageText;
   late final TextComponent helpText;
   RallySession session = RallySession();
+  final List<ExplosiveTarget> _targets = [];
+  final Map<ExplosiveTarget, int> _explosionQueue = {};
 
   double _horizontalInput = 0;
   double? _pointerTargetX;
@@ -240,6 +247,9 @@ class WallRallyGame extends Forge2DGame
   bool _missQueued = false;
   double _queuedHitPower = 0;
   double _queuedAngularVelocity = 0;
+  int _bumperHitsQueued = 0;
+  int wave = 1;
+  double _waveRespawnTimer = 0;
 
   @override
   Color backgroundColor() => const Color(0xFF071A24);
@@ -269,7 +279,37 @@ class WallRallyGame extends Forge2DGame
 
     ball = RallyBall(Vector2(tableRect.center.dx, paddleY - 2));
     await world.add(ball);
+    await _createArenaObjects();
     _refreshHud();
+  }
+
+  Future<void> _createArenaObjects() async {
+    final center = tableRect.center;
+    await world.addAll([
+      ArenaBumper(
+        Vector2(tableRect.left + tableRect.width * 0.23, center.dy + 2),
+      ),
+      ArenaBumper(
+        Vector2(tableRect.right - tableRect.width * 0.23, center.dy + 2),
+      ),
+      ArenaBumper(Vector2(center.dx, tableRect.top + tableRect.height * 0.3)),
+    ]);
+    _spawnTargets();
+  }
+
+  void _spawnTargets() {
+    final center = tableRect.center;
+    final spread = tableRect.width * 0.11;
+    for (var i = -2; i <= 2; i++) {
+      final target = ExplosiveTarget(
+        Vector2(
+          center.dx + i * spread,
+          tableRect.top + 8 + (i.isEven ? 0 : 2.2),
+        ),
+      );
+      _targets.add(target);
+      world.add(target);
+    }
   }
 
   Future<void> _createTable() async {
@@ -332,6 +372,7 @@ class WallRallyGame extends Forge2DGame
       _missQueued = false;
       _handleMiss();
     }
+    _processArenaEvents(dt);
     _refreshHud();
   }
 
@@ -346,6 +387,88 @@ class WallRallyGame extends Forge2DGame
   void queueMiss() {
     if (session.isPlaying) {
       _missQueued = true;
+    }
+  }
+
+  void queueExplosion(ExplosiveTarget target, {int chain = 1}) {
+    if (!session.isPlaying || target.detonated) {
+      return;
+    }
+    final previousChain = _explosionQueue[target] ?? 0;
+    _explosionQueue[target] = math.max(previousChain, chain);
+  }
+
+  void queueBumperHit() {
+    if (session.isPlaying) {
+      _bumperHitsQueued++;
+    }
+  }
+
+  void _processArenaEvents(double dt) {
+    for (var i = 0; i < _bumperHitsQueued; i++) {
+      session.registerBumperHit();
+    }
+    _bumperHitsQueued = 0;
+
+    if (_explosionQueue.isNotEmpty) {
+      final queued = Map<ExplosiveTarget, int>.from(_explosionQueue);
+      _explosionQueue.clear();
+      for (final entry in queued.entries) {
+        _detonate(entry.key, entry.value);
+      }
+    }
+
+    if (_targets.isEmpty && _explosionQueue.isEmpty && _waveRespawnTimer <= 0) {
+      _waveRespawnTimer = 1.4;
+    }
+    if (_waveRespawnTimer > 0) {
+      _waveRespawnTimer -= dt;
+      if (_waveRespawnTimer <= 0) {
+        wave++;
+        _spawnTargets();
+      }
+    }
+  }
+
+  void _detonate(ExplosiveTarget target, int chain) {
+    if (target.detonated) {
+      return;
+    }
+    target.detonated = true;
+    final position = target.body.position.clone();
+    _targets.remove(target);
+    target.removeFromParent();
+    session.registerTarget(chain: chain);
+    world.add(ExplosionBurst(position));
+
+    final ballOffset = ball.body.position - position;
+    if (ballOffset.length2 < 64 && ballOffset.length2 > 0.01) {
+      final distance = math.max(ballOffset.length, 1).toDouble();
+      ball.body.applyLinearImpulse(ballOffset.normalized() * (16 / distance));
+    }
+
+    const debrisColors = [
+      Color(0xFFFFD54F),
+      Color(0xFFFF6D00),
+      Color(0xFFEF5350),
+    ];
+    for (var i = 0; i < 10; i++) {
+      final angle = i / 10 * math.pi * 2 + _random.nextDouble() * 0.25;
+      final speed = 8 + _random.nextDouble() * 9;
+      world.add(
+        ExplosionDebris(
+          spawnPosition: position,
+          initialVelocity: Vector2(math.cos(angle), math.sin(angle)) * speed,
+          size: 0.18 + _random.nextDouble() * 0.22,
+          color: debrisColors[i % debrisColors.length],
+        ),
+      );
+    }
+
+    for (final neighbor in List<ExplosiveTarget>.from(_targets)) {
+      if ((neighbor.body.position - position).length < 6.2) {
+        queueExplosion(neighbor, chain: chain + 1);
+      }
     }
   }
 
@@ -391,6 +514,21 @@ class WallRallyGame extends Forge2DGame
     _missQueued = false;
     _queuedHitPower = 0;
     _queuedAngularVelocity = 0;
+    _explosionQueue.clear();
+    _bumperHitsQueued = 0;
+    _waveRespawnTimer = 0;
+    wave = 1;
+    for (final target in List<ExplosiveTarget>.from(_targets)) {
+      target.removeFromParent();
+    }
+    _targets.clear();
+    for (final debris in world.children.whereType<ExplosionDebris>().toList()) {
+      debris.removeFromParent();
+    }
+    for (final burst in world.children.whereType<ExplosionBurst>().toList()) {
+      burst.removeFromParent();
+    }
+    _spawnTargets();
     ball.holdAt(paddle.body.position + Vector2(0, -2));
   }
 
@@ -398,7 +536,9 @@ class WallRallyGame extends Forge2DGame
     hudText.text =
         'SCORE ${session.score}   RALLY ${session.rally}   '
         'BEST ${session.bestRally}   SMASH ${session.smashes}   '
-        'LIFE ${session.lives}   GRAVITY ON';
+        'LIFE ${session.lives}   GRAVITY ON\n'
+        'WAVE $wave   TARGET ${_targets.length}   '
+        'DESTROYED ${session.targetsDestroyed}';
 
     if (session.isGameOver) {
       messageText.text = 'GAME OVER\nTAP OR R TO RETRY';
@@ -408,7 +548,7 @@ class WallRallyGame extends Forge2DGame
       helpText.text = 'MOVE: A / D · ARROWS · MOUSE · DRAG   SWING: SPACE';
     } else {
       messageText.text = '';
-      helpText.text = 'SPACE: SWING   Read the free-fall arc!';
+      helpText.text = 'SPACE: SWING   Hit orange targets for chain explosions!';
     }
   }
 
