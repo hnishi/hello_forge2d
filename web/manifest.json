@@ -1,12 +1,12 @@
 {
-    "name": "flame_tutorial",
-    "short_name": "flame_tutorial",
+    "name": "Wall Rally",
+    "short_name": "Wall Rally",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#101629",
+    "theme_color": "#101629",
+    "description": "Single-player 2D table tennis wall rally.",
+    "orientation": "landscape-primary",
     "prefer_related_applications": false,
     "icons": [
         {
