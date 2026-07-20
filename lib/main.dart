@@ -1,177 +1,401 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flame/game.dart';
 import 'package:flame/components.dart';
-import 'package:flame/input.dart';
+import 'package:flame/events.dart';
+import 'package:flame/extensions.dart';
+import 'package:flame/game.dart';
+import 'package:flame_forge2d/flame_forge2d.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flame_forge2d/position_body_component.dart';
-import 'package:flame_forge2d/body_component.dart';
-import 'package:flame_forge2d/forge2d_game.dart';
-import 'package:forge2d/forge2d.dart';
 
 import 'boundaries.dart';
+import 'game_session.dart';
 
-class Player extends PositionBodyComponent {
-  final Vector2 position;
+class Player extends BodyComponent<SpaceShooterGame> with ContactCallbacks {
+  final Vector2 initialPosition;
+  final Vector2 size = Vector2(2, 3);
+  Vector2 facing = Vector2(1, 0);
 
-  Player(
-    this.position, {
-    Vector2? size,
-  }) : super(size: size ?? Vector2(2, 3));
+  Player(this.initialPosition) : super(renderBody: false);
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    final sprite = await gameRef.loadSprite('player-sprite.png');
-    positionComponent = SpriteComponent(sprite: sprite, size: size);
+    final sprite = await game.loadSprite('player-sprite.png');
+    await add(
+      SpriteComponent(sprite: sprite, size: size, anchor: Anchor.center),
+    );
   }
 
   @override
   Body createBody() {
-    final shape = PolygonShape();
+    final shape = PolygonShape()
+      ..set([
+        Vector2(-size.x / 2, -size.y / 2),
+        Vector2(size.x / 2, -size.y / 2),
+        Vector2(0, size.y / 2),
+      ]);
 
-    final vertices = [
-      Vector2(-size.x / 2, -size.y / 2),
-      Vector2(size.x / 2, -size.y / 2),
-      Vector2(0, size.y / 2),
-    ];
-    shape.set(vertices);
-
-    final fixtureDef = FixtureDef(shape)
-      ..userData = this // To be able to determine object in collision
-      ..restitution = 0.4
-      ..density = 1.0
-      ..friction = 0.5;
-
-    final bodyDef = BodyDef()
-      ..position = position
-      ..angle = (position.x + position.y) / 2 * math.pi
-      ..type = BodyType.dynamic;
+    final fixtureDef = FixtureDef(
+      shape,
+      restitution: 0.25,
+      density: 1,
+      friction: 0.4,
+    );
+    final bodyDef = BodyDef(
+      userData: this,
+      position: initialPosition,
+      linearDamping: 3.5,
+      fixedRotation: true,
+      type: BodyType.dynamic,
+    );
     return world.createBody(bodyDef)..createFixture(fixtureDef);
   }
 
-  void move(Vector2 delta) {
-    body.applyLinearImpulse(delta * 100);
+  @override
+  void beginContact(Object other, Contact contact) {
+    if (other is EnergyCore) {
+      game.collect(other);
+    } else if (other is BlobPart) {
+      game.hitByBlob(other);
+    }
+  }
+
+  void steer(Vector2 direction) {
+    if (direction.length2 == 0) {
+      return;
+    }
+
+    final normalized = direction.normalized();
+    facing = normalized;
+    body.applyForce(normalized * 55);
+
+    const maxSpeed = 13.0;
+    if (body.linearVelocity.length > maxSpeed) {
+      body.linearVelocity.scale(maxSpeed / body.linearVelocity.length);
+    }
+  }
+
+  void dash(Vector2 direction) {
+    final dashDirection = direction.length2 == 0
+        ? facing
+        : direction.normalized();
+    facing = dashDirection;
+    body.applyLinearImpulse(dashDirection * 22);
+  }
+
+  void resetAt(Vector2 position) {
+    body.setTransform(position, 0);
+    body.linearVelocity.setZero();
+    body.angularVelocity = 0;
+    facing = Vector2(1, 0);
+  }
+}
+
+class EnergyCore extends BodyComponent {
+  final Vector2 spawnPosition;
+  bool collected = false;
+
+  EnergyCore(this.spawnPosition)
+    : super(paint: Paint()..color = const Color(0xFFFFD54F));
+
+  @override
+  Body createBody() {
+    final fixtureDef = FixtureDef(CircleShape()..radius = 0.8, isSensor: true);
+    final bodyDef = BodyDef(userData: this, position: spawnPosition);
+    return world.createBody(bodyDef)..createFixture(fixtureDef);
+  }
+
+  @override
+  void renderCircle(Canvas canvas, Offset center, double radius) {
+    canvas.drawCircle(
+      center,
+      radius * 1.45,
+      Paint()..color = const Color(0x55FFD54F),
+    );
+    canvas.drawCircle(center, radius, paint);
+    canvas.drawCircle(
+      center,
+      radius * 0.35,
+      Paint()..color = const Color(0xFFFFFFFF),
+    );
   }
 }
 
 class BlobPart extends BodyComponent {
+  static const int bodyCount = 20;
+
   final ConstantVolumeJointDef jointDef;
   final int bodyNumber;
   final Vector2 blobRadius;
   final Vector2 blobCenter;
 
-  BlobPart(
-    this.bodyNumber,
-    this.jointDef,
-    this.blobRadius,
-    this.blobCenter,
-  );
+  BlobPart(this.bodyNumber, this.jointDef, this.blobRadius, this.blobCenter)
+    : super(paint: Paint()..color = const Color(0xFFE84A5F));
 
   @override
   Body createBody() {
-    const nBodies = 20.0;
-    const bodyRadius = 0.5;
-    final angle = (bodyNumber / nBodies) * math.pi * 2;
-    final x = blobCenter.x + blobRadius.x * math.sin(angle);
-    final y = blobCenter.y + blobRadius.y * math.cos(angle);
-
-    final bodyDef = BodyDef()
-      ..fixedRotation = true
-      ..position.setValues(x, y)
-      ..type = BodyType.dynamic;
+    final angle = (bodyNumber / bodyCount) * math.pi * 2;
+    final position = Vector2(
+      blobCenter.x + blobRadius.x * math.sin(angle),
+      blobCenter.y + blobRadius.y * math.cos(angle),
+    );
+    final bodyDef = BodyDef(
+      userData: this,
+      fixedRotation: true,
+      linearDamping: 1.2,
+      position: position,
+      type: BodyType.dynamic,
+    );
     final body = world.createBody(bodyDef);
-
-    final shape = CircleShape()..radius = bodyRadius;
-    final fixtureDef = FixtureDef(shape)
-      ..density = 1.0
-      ..filter.groupIndex = -2;
+    final fixtureDef = FixtureDef(
+      CircleShape()..radius = 0.5,
+      density: 1,
+      restitution: 0.3,
+      filter: Filter()..groupIndex = -2,
+    );
     body.createFixture(fixtureDef);
     jointDef.addBody(body);
     return body;
   }
+
+  void chase(Vector2 target) {
+    final direction = target - body.position;
+    if (direction.length2 > 0.1) {
+      body.applyForce(direction.normalized() * 4 + Vector2(0, -7));
+    }
+  }
 }
 
-class SpaceShooterGame extends Forge2DGame with KeyboardEvents {
-  SpaceShooterGame() : super(gravity: Vector2(0, -10.0));
+class SpaceShooterGame extends Forge2DGame with KeyboardEvents, TapCallbacks {
+  SpaceShooterGame() : super(gravity: Vector2(0, 10));
 
-  static const int speed = 20;
-  final Vector2 velocity = Vector2(0, 0);
-
-  static final TextPaint textRenderer = TextPaint(
-    style: const TextStyle(color: Colors.white30, fontSize: 6),
+  static final TextPaint hudRenderer = TextPaint(
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 18,
+      fontWeight: FontWeight.bold,
+    ),
   );
-  late final TextComponent positionText;
+  static final TextPaint messageRenderer = TextPaint(
+    style: const TextStyle(
+      color: Color(0xFFFFD54F),
+      fontSize: 28,
+      fontWeight: FontWeight.bold,
+    ),
+  );
 
-  late Player player;
+  final math.Random _random = math.Random();
+  final Vector2 _movement = Vector2.zero();
+  final List<BlobPart> _blobParts = [];
+  final List<EnergyCore> _collectedCores = [];
+
+  late final Vector2 _worldCenter;
+  late final Player player;
+  late final TextComponent hudText;
+  late final TextComponent messageText;
+  GameSession session = GameSession();
+  EnergyCore? _activeCore;
+  double _dashCooldown = 0;
+  double _damageCooldown = 0;
+
+  @override
+  Color backgroundColor() => const Color(0xFF101629);
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
-    positionText = TextComponent(
-      text: 'use W, A, S, D keys\nto move spacecraft',
-      textRenderer: textRenderer,
-      position: Vector2(1, 1),
+    _worldCenter = camera.visibleWorldRect.center.toVector2();
+    await world.addAll(createBoundaries(this));
+
+    hudText = TextComponent(
+      textRenderer: hudRenderer,
+      position: Vector2(12, 12),
       anchor: Anchor.topLeft,
     );
-    add(positionText);
-
-    final worldCenter = screenToWorld(size * camera.zoom / 2);
-    addAll(createBoundaries(this));
-
-    final position = worldCenter;
-    player = Player(position);
-    add(player);
-
-    final blobCenter = worldCenter + Vector2(0, 30);
-    final blobRadius = Vector2.all(6.0);
-    final jointDef = ConstantVolumeJointDef()
-      ..frequencyHz = 20.0
-      ..dampingRatio = 1.0
-      ..collideConnected = false;
-    await Future.wait(
-      List.generate(
-        20,
-        (i) => add(BlobPart(i, jointDef, blobRadius, blobCenter)),
-      ),
+    messageText = TextComponent(
+      textRenderer: messageRenderer,
+      position: size / 2,
+      anchor: Anchor.center,
     );
-    world.createJoint(jointDef);
+    await camera.viewport.addAll([hudText, messageText]);
+
+    player = Player(_worldCenter);
+    await world.add(player);
+    await _createBlob();
+    _spawnCore();
+    _refreshHud();
+  }
+
+  Future<void> _createBlob() async {
+    final jointDef = ConstantVolumeJointDef()
+      ..frequencyHz = 12
+      ..dampingRatio = 1
+      ..collideConnected = false;
+    final blobCenter = _worldCenter + Vector2(0, -18);
+    for (var i = 0; i < BlobPart.bodyCount; i++) {
+      final part = BlobPart(i, jointDef, Vector2.all(4.5), blobCenter);
+      _blobParts.add(part);
+      await world.add(part);
+    }
+    world.createJoint(ConstantVolumeJoint(world.physicsWorld, jointDef));
   }
 
   @override
   void update(double dt) {
+    if (session.isPlaying) {
+      session.update(dt);
+      _dashCooldown = math.max(0.0, _dashCooldown - dt).toDouble();
+      _damageCooldown = math.max(0.0, _damageCooldown - dt).toDouble();
+      player.steer(_movement);
+      for (final part in _blobParts) {
+        part.chase(player.body.position);
+      }
+    }
+
     super.update(dt);
-    final displacement = velocity * (speed * dt);
-    player.move(displacement);
+    _processCollectedCores();
+    _refreshHud();
+  }
+
+  void collect(EnergyCore core) {
+    if (!session.isPlaying || core.collected) {
+      return;
+    }
+    core.collected = true;
+    session.collectCore();
+    _collectedCores.add(core);
+  }
+
+  void _processCollectedCores() {
+    if (_collectedCores.isEmpty) {
+      return;
+    }
+    for (final core in _collectedCores) {
+      core.removeFromParent();
+      if (identical(core, _activeCore)) {
+        _activeCore = null;
+      }
+    }
+    _collectedCores.clear();
+    if (session.isPlaying) {
+      _spawnCore();
+    }
+  }
+
+  void hitByBlob(BlobPart blob) {
+    if (!session.isPlaying || _damageCooldown > 0) {
+      return;
+    }
+    session.takeHit();
+    _damageCooldown = 1.5;
+    player.dash(player.body.position - blob.body.position);
+  }
+
+  void _spawnCore() {
+    if (_activeCore != null || !session.isPlaying) {
+      return;
+    }
+
+    final rect = camera.visibleWorldRect.deflate(2);
+    var position = _worldCenter.clone();
+    for (var attempt = 0; attempt < 12; attempt++) {
+      position = Vector2(
+        rect.left + _random.nextDouble() * rect.width,
+        rect.top + _random.nextDouble() * rect.height,
+      );
+      if ((position - player.body.position).length >= 5) {
+        break;
+      }
+    }
+
+    _activeCore = EnergyCore(position);
+    world.add(_activeCore!);
+  }
+
+  void _dash(Vector2 direction) {
+    if (!session.isPlaying || _dashCooldown > 0) {
+      return;
+    }
+    player.dash(direction);
+    _dashCooldown = 1;
+  }
+
+  void _restart() {
+    _activeCore?.removeFromParent();
+    _activeCore = null;
+    _collectedCores.clear();
+    session = GameSession();
+    _dashCooldown = 0;
+    _damageCooldown = 0;
+    _movement.setZero();
+    player.resetAt(_worldCenter);
+    _spawnCore();
+    _refreshHud();
+  }
+
+  void _refreshHud() {
+    final comboLabel = session.combo > 1 ? '  COMBO x${session.combo}' : '';
+    hudText.text =
+        'SCORE ${session.score}   '
+        'CORE ${session.cores}/${GameSession.targetCores}   '
+        'LIFE ${session.lives}   '
+        'TIME ${session.timeLeft.ceil()}$comboLabel\n'
+        'MOVE: WASD / ARROWS   DASH: SPACE / TAP';
+
+    if (session.won) {
+      messageText.text = 'MISSION COMPLETE!\nR / TAP TO PLAY AGAIN';
+    } else if (session.lost) {
+      messageText.text = 'MISSION FAILED\nR / TAP TO RETRY';
+    } else {
+      messageText.text = '';
+    }
   }
 
   @override
   KeyEventResult onKeyEvent(
-    RawKeyEvent event,
+    KeyEvent event,
     Set<LogicalKeyboardKey> keysPressed,
   ) {
-    final isKeyDown = event is RawKeyDownEvent;
+    _movement.setValues(
+      (keysPressed.contains(LogicalKeyboardKey.keyD) ||
+                  keysPressed.contains(LogicalKeyboardKey.arrowRight)
+              ? 1
+              : 0) -
+          (keysPressed.contains(LogicalKeyboardKey.keyA) ||
+                  keysPressed.contains(LogicalKeyboardKey.arrowLeft)
+              ? 1
+              : 0),
+      (keysPressed.contains(LogicalKeyboardKey.keyS) ||
+                  keysPressed.contains(LogicalKeyboardKey.arrowDown)
+              ? 1
+              : 0) -
+          (keysPressed.contains(LogicalKeyboardKey.keyW) ||
+                  keysPressed.contains(LogicalKeyboardKey.arrowUp)
+              ? 1
+              : 0),
+    );
 
-    if (event.logicalKey == LogicalKeyboardKey.keyA) {
-      velocity.x = isKeyDown ? -1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.keyD) {
-      velocity.x = isKeyDown ? 1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.keyW) {
-      velocity.y = isKeyDown ? 1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.keyS) {
-      velocity.y = isKeyDown ? -1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      velocity.x = isKeyDown ? -1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      velocity.x = isKeyDown ? 1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      velocity.y = isKeyDown ? 1 : 0;
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      velocity.y = isKeyDown ? -1 : 0;
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.space) {
+        _dash(_movement);
+      } else if (event.logicalKey == LogicalKeyboardKey.keyR &&
+          !session.isPlaying) {
+        _restart();
+      }
     }
     return super.onKeyEvent(event, keysPressed);
+  }
+
+  @override
+  void onTapDown(TapDownEvent event) {
+    if (!session.isPlaying) {
+      _restart();
+      return;
+    }
+    final target = screenToWorld(event.canvasPosition);
+    _dash(target - player.body.position);
   }
 }
 

@@ -1,16 +1,21 @@
-# flame_tutorial
+# Core Rush
 
-A new Flutter project.
+Flame と Forge2D を使った、物理ベースの短時間アクションゲームです。追跡してくるソフトボディを避けながら、45 秒以内に 8 個のエネルギーコアを集めます。
 
-## Getting Started
+## 遊び方
 
-This project is a starting point for a Flutter application.
+- `WASD` / 矢印キー: 移動
+- `Space`: ダッシュ（1 秒クールダウン）
+- タップ / クリック: その方向へダッシュ
+- `R`: ゲーム終了後にリスタート
 
-A few resources to get you started if this is your first Flutter project:
+3 秒以内に次のコアを取るとコンボが増え、獲得スコアも上昇します。コア取得で残り時間が 1.5 秒増え、敵との接触でライフ 1 と残り時間 2 秒を失います。
 
-- [Lab: Write your first Flutter app](https://flutter.dev/docs/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://flutter.dev/docs/cookbook)
+## 実行
 
-For help getting started with Flutter, view our
-[online documentation](https://flutter.dev/docs), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```sh
+flutter pub get
+flutter run -d chrome
+```
+
+ゲームルールのテストは `flutter test` で実行できます。

@@ -1,13 +1,12 @@
-import 'package:flame_forge2d/body_component.dart';
+import 'package:flame/extensions.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
-import 'package:flame_forge2d/forge2d_game.dart';
-import 'package:forge2d/forge2d.dart';
 
 List<Wall> createBoundaries(Forge2DGame game) {
-  final topLeft = Vector2.zero();
-  final bottomRight = game.screenToWorld(game.camera.viewport.effectiveSize);
-  final topRight = Vector2(bottomRight.x, topLeft.y);
-  final bottomLeft = Vector2(topLeft.x, bottomRight.y);
+  final visibleRect = game.camera.visibleWorldRect;
+  final topLeft = visibleRect.topLeft.toVector2();
+  final topRight = visibleRect.topRight.toVector2();
+  final bottomRight = visibleRect.bottomRight.toVector2();
+  final bottomLeft = visibleRect.bottomLeft.toVector2();
 
   return [
     Wall(topLeft, topRight),
@@ -26,15 +25,8 @@ class Wall extends BodyComponent {
   @override
   Body createBody() {
     final shape = EdgeShape()..set(start, end);
-
-    final fixtureDef = FixtureDef(shape)
-      ..restitution = 0.0
-      ..friction = 0.3;
-
-    final bodyDef = BodyDef()
-      ..userData = this // To be able to determine object in collision
-      ..position = Vector2.zero()
-      ..type = BodyType.static;
+    final fixtureDef = FixtureDef(shape, friction: 0.3);
+    final bodyDef = BodyDef(userData: this);
 
     return world.createBody(bodyDef)..createFixture(fixtureDef);
   }

@@ -1,12 +1,12 @@
 {
-    "name": "flame_tutorial",
-    "short_name": "flame_tutorial",
+    "name": "Core Rush",
+    "short_name": "Core Rush",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#101629",
+    "theme_color": "#101629",
+    "description": "A physics-based arcade game.",
+    "orientation": "landscape-primary",
     "prefer_related_applications": false,
     "icons": [
         {
