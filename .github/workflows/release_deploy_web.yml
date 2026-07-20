@@ -1,34 +1,44 @@
-name: Deploy to web (github pages)
+name: Deploy to web (GitHub Pages)
+
 on:
   push:
     branches:
-    - main
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
-    # Set up Flutter.
-    - name: Clone Flutter repository with master channel
-      uses: subosito/flutter-action@4389e6cbc6cb8a4b18c628ff96ff90be0e926aa8
-      with:
-        channel: master
-    - run: flutter doctor -v
+      - name: Check out repository
+        uses: actions/checkout@v6
 
-    # Checkout code and get packages.
-    - name: Check out repository code
-      uses: actions/checkout@v2
-    - run: flutter pub get
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.6
+          cache: true
 
-    # Build and deploy.
-    - name: Build
-      run: flutter build -v web --release --web-renderer canvaskit --base-href "/$(basename $GITHUB_REPOSITORY)/"
-      shell: bash
-      env:
-        GITHUB_CONTEXT: ${{ github.repository }}
+      - name: Install dependencies
+        run: flutter pub get
 
-    - name: Deploy
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./build/web
+      - name: Build Flutter Web
+        run: >-
+          flutter build web
+          --release
+          --base-href "/${{ github.event.repository.name }}/"
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./build/web
+          force_orphan: true
