@@ -12,8 +12,8 @@ class TableSurface extends PositionComponent {
       );
 
   final Paint _surfacePaint = Paint()..color = const Color(0xFF164D5A);
-  final Paint _upperAirPaint = Paint()..color = const Color(0xFF103745);
-  final Paint _lowerAirPaint = Paint()..color = const Color(0x2217D7FF);
+  final Paint _opponentAreaPaint = Paint()..color = const Color(0xFF103745);
+  final Paint _playerAreaPaint = Paint()..color = const Color(0x2217D7FF);
   final Paint _innerPaint = Paint()
     ..color = const Color(0xFF0B4F47)
     ..style = PaintingStyle.stroke
@@ -30,11 +30,11 @@ class TableSurface extends PositionComponent {
       RRect.fromRectAndRadius(rect, const Radius.circular(0.7)),
       _surfacePaint,
     );
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.x, size.y / 2), _upperAirPaint);
     canvas.drawRect(
-      Rect.fromLTWH(0, size.y / 2, size.x, size.y / 2),
-      _lowerAirPaint,
+      Rect.fromLTWH(size.x / 2, 0, size.x / 2, size.y),
+      _opponentAreaPaint,
     );
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.x / 2, size.y), _playerAreaPaint);
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect.deflate(0.5), const Radius.circular(0.4)),
       _innerPaint,
@@ -50,17 +50,17 @@ class TableSurface extends PositionComponent {
       _linePaint,
     );
     for (var i = 1; i < 4; i++) {
-      final y = size.y * i / 4;
+      final x = size.x * i / 4;
       canvas.drawLine(
-        Offset(0.5, y),
-        Offset(size.x - 0.5, y),
+        Offset(x, 0.5),
+        Offset(x, size.y - 0.5),
         Paint()
           ..color = const Color(0x33FFFFFF)
           ..strokeWidth = 0.08,
       );
     }
     canvas.drawRect(
-      Rect.fromLTWH(0.5, size.y - 5, size.x - 1, 4.5),
+      Rect.fromLTWH(0.5, 0.5, size.x / 2 - 0.5, size.y - 1),
       _goalPaint,
     );
   }
@@ -77,8 +77,8 @@ class TableWall extends BodyComponent {
   Body createBody() {
     final fixtureDef = FixtureDef(
       EdgeShape()..set(start, end),
-      restitution: 1,
-      friction: 0,
+      restitution: 0.86,
+      friction: 0.62,
     );
     return world.createBody(BodyDef(userData: this))..createFixture(fixtureDef);
   }

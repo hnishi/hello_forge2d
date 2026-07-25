@@ -4,6 +4,10 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 import 'package:flame_forge2d/flame_forge2d.dart';
 
+abstract interface class ArenaEventSink {
+  void queueExplosion(ExplosiveTarget target, {int chain = 1});
+}
+
 class ExplosiveTarget extends BodyComponent {
   ExplosiveTarget(this.spawnPosition)
     : super(paint: Paint()..color = const Color(0xFFFF8A3D));
@@ -11,6 +15,31 @@ class ExplosiveTarget extends BodyComponent {
   static const double radius = 1.3;
   final Vector2 spawnPosition;
   bool detonated = false;
+  double fuseProgress = 0;
+  double _fuseDuration = 0;
+  double _fuseRemaining = 0;
+  int pendingChain = 1;
+
+  bool get isArmed => _fuseRemaining > 0;
+
+  void arm({required double duration, required int chain}) {
+    if (detonated || isArmed) {
+      return;
+    }
+    _fuseDuration = duration;
+    _fuseRemaining = duration;
+    pendingChain = chain;
+    fuseProgress = 0.001;
+  }
+
+  bool tickFuse(double dt) {
+    if (!isArmed) {
+      return false;
+    }
+    _fuseRemaining -= dt;
+    fuseProgress = (1 - _fuseRemaining / _fuseDuration).clamp(0, 1);
+    return _fuseRemaining <= 0;
+  }
 
   @override
   Body createBody() {
@@ -25,6 +54,13 @@ class ExplosiveTarget extends BodyComponent {
 
   @override
   void renderCircle(Canvas canvas, Offset center, double radius) {
+    if (isArmed) {
+      canvas.drawCircle(
+        center,
+        radius * (1.3 + math.sin(fuseProgress * math.pi * 10).abs() * 0.25),
+        Paint()..color = const Color(0x66FFFFFF),
+      );
+    }
     canvas.drawCircle(
       center,
       radius * 1.18,
@@ -83,35 +119,49 @@ class ArenaBumper extends BodyComponent {
   }
 }
 
-class ExplosionDebris extends BodyComponent {
+class ExplosionDebris extends BodyComponent<Forge2DGame> with ContactCallbacks {
   ExplosionDebris({
     required this.spawnPosition,
     required this.initialVelocity,
     required this.size,
     required this.color,
+    required this.massDensity,
   }) : super(paint: Paint()..color = color);
 
   final Vector2 spawnPosition;
   final Vector2 initialVelocity;
   final double size;
   final Color color;
+  final double massDensity;
   double _age = 0;
+  bool _spentSecondaryTrigger = false;
 
   @override
   Body createBody() {
     final fixtureDef = FixtureDef(
       PolygonShape()..setAsBoxXY(size, size * 0.65),
-      density: 0.45,
+      density: massDensity,
       restitution: 0.65,
       friction: 0.35,
     );
     final bodyDef = BodyDef(
+      userData: this,
       position: spawnPosition,
       linearVelocity: initialVelocity,
       angularVelocity: initialVelocity.x * 0.8,
       type: BodyType.dynamic,
     );
     return world.createBody(bodyDef)..createFixture(fixtureDef);
+  }
+
+  @override
+  void beginContact(Object other, Contact contact) {
+    if (other is ExplosiveTarget &&
+        !_spentSecondaryTrigger &&
+        body.linearVelocity.length > 6) {
+      _spentSecondaryTrigger = true;
+      (game as ArenaEventSink).queueExplosion(other, chain: 1);
+    }
   }
 
   @override
@@ -159,6 +209,14 @@ class ExplosionBurst extends PositionComponent {
       Offset.zero,
       1.7 * eased,
       Paint()..color = Color.fromARGB(alpha, 255, 255, 255),
+    );
+    canvas.drawCircle(
+      Offset.zero,
+      8.5 * progress,
+      Paint()
+        ..color = Color.fromARGB(alpha, 255, 220, 120)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.16 + (1 - progress) * 0.28,
     );
   }
 }
